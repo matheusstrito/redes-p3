@@ -1,5 +1,5 @@
 from iputils import *
-
+import ipaddress
 
 class IP:
     def __init__(self, enlace):
@@ -13,6 +13,7 @@ class IP:
         self.enlace.registrar_recebedor(self.__raw_recv)
         self.ignore_checksum = self.enlace.ignore_checksum
         self.meu_endereco = None
+        self.tabela_encaminhamento = []
 
     def __raw_recv(self, datagrama):
         dscp, ecn, identification, flags, frag_offset, ttl, proto, \
@@ -24,14 +25,21 @@ class IP:
         else:
             # atua como roteador
             next_hop = self._next_hop(dst_addr)
-            # TODO: Trate corretamente o campo TTL do datagrama
+            # (ainda não tratamos TTL no passo 1)
             self.enlace.enviar(datagrama, next_hop)
 
-    def _next_hop(self, dest_addr):
-        # TODO: Use a tabela de encaminhamento para determinar o próximo salto
-        # (next_hop) a partir do endereço de destino do datagrama (dest_addr).
-        # Retorne o next_hop para o dest_addr fornecido.
-        pass
+    def _next_hop(self, dest_addr_str):
+        if not self.tabela_encaminhamento:
+            return None
+        try:
+            dest_addr_ip_obj = ipaddress.ip_address(dest_addr_str)
+        except ValueError:
+            return None
+
+        for network_obj, _prefix_len, next_hop_ip in self.tabela_encaminhamento:
+            if dest_addr_ip_obj in network_obj:
+                return next_hop_ip
+        return None
 
     def definir_endereco_host(self, meu_endereco):
         """
@@ -45,13 +53,17 @@ class IP:
         """
         Define a tabela de encaminhamento no formato
         [(cidr0, next_hop0), (cidr1, next_hop1), ...]
-
-        Onde os CIDR são fornecidos no formato 'x.y.z.w/n', e os
-        next_hop são fornecidos no formato 'x.y.z.w'.
         """
-        # TODO: Guarde a tabela de encaminhamento. Se julgar conveniente,
-        # converta-a em uma estrutura de dados mais eficiente.
-        pass
+        self.tabela_encaminhamento = []
+        if tabela is None:
+            return
+        for cidr_str, next_hop_ip_str in tabela:
+            try:
+                network = ipaddress.ip_network(cidr_str, strict=False)
+                self.tabela_encaminhamento.append((network, network.prefixlen, next_hop_ip_str))
+            except ValueError:
+                pass
+        self.tabela_encaminhamento.sort(key=lambda item: item[1], reverse=True)
 
     def registrar_recebedor(self, callback):
         """
@@ -65,6 +77,5 @@ class IP:
         (string no formato x.y.z.w).
         """
         next_hop = self._next_hop(dest_addr)
-        # TODO: Assumindo que a camada superior é o protocolo TCP, monte o
-        # datagrama com o cabeçalho IP, contendo como payload o segmento.
-        self.enlace.enviar(datagrama, next_hop)
+        # (não implementado ainda no Passo 1)
+        self.enlace.enviar(segmento, next_hop)
